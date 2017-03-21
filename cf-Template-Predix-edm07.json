@@ -1,0 +1,1175 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CloudFormation template for creating the VPC and stack",
+  "Parameters": {
+  
+  "EnvType" : {
+      "Description" : "Environment type.",
+      "Default" : "dev",
+      "Type" : "String",
+      "AllowedValues" : ["prod", "dev”, “stg”],
+      "ConstraintDescription" : "must specify prod, dev, Stg, or test."
+    },
+ 
+  "IndexServerAMI": {
+      "Default": "ami-xxxx",
+      "ConstraintDescription": "must be a valid ami.",
+      "Type": "String",
+      "Description": "AMI id for IndexAMI"
+    },
+  "DocTransformationServerAMI": {
+      "Default": "ami-xxxx",
+      "ConstraintDescription": "must be a valid ami.",
+      "Type": "String",
+      "Description": "AMI id for IndexAMI"
+    },
+  "AppServerAMI": {
+      "Default": "ami-xxxx",
+      "ConstraintDescription": "must be a valid ami.",
+      "Type": "String",
+      "Description": "AMI id for IndexAMI"
+    },
+    "IndexServerInstanceType": {
+      "Description": "WebServer EC2 instance type",
+      "Type": "String",
+      "Default": "m3.medium",
+      "AllowedValues": [
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m4.large",
+        "m4.xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "DocTransformationServerInstanceType": {
+      "Description": "AppServer EC2 instance type",
+      "Type": "String",
+      "Default": "m3.medium",
+      "AllowedValues": [
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m4.large",
+        "m4.xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "AppServerInstanceType": {
+      "Description": "AppServer EC2 instance type",
+      "Type": "String",
+      "Default": "m3.medium",
+      "AllowedValues": [
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m4.large",
+        "m4.xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+	"EDMDBInstanceType": {
+      "Description": "DB instance type",
+      "Type": "String",
+      "Default": "db.m3.medium",
+      
+      "ConstraintDescription": "must be a valid DB instance type."
+    },
+	"DBName": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Optional: DB Name identifier to be used to create RDS instance"
+    },
+    "DBSnapshotName": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Optional: DB Snapshot identifier to be used to create RDS instance"
+    },
+    "IsMultiAZ": {
+      "Default": "false",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "True if the DB is Multi AZ. By default it is false"
+    },
+    
+    "IndexServerKeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+    "DocTransformationServerKeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+    "AppServerKeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+	"privateSubnet1": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Private Subnet1 ID"
+    },
+	"privateSubnet2": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Private Subnet2 ID"
+    },
+	"PrivateDBSubnetID1": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Private DB Subnet1 ID"
+    },
+	"PrivateDBSubnetID2": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Private DB Subnet2 ID"
+    },
+	"VpcId": {
+      "Default": "",
+      "ConstraintDescription": "",
+      "Type": "String",
+      "Description": "Provide VPC ID"
+    }
+  },
+ 
+    
+    
+  "Conditions" : {
+    "CreateProdResources" : {"Fn::Equals" : [{"Ref" : "EnvType"}, "prod"]},
+    "CreateDevResources" : {"Fn::Equals" : [{"Ref" : "EnvType"}, "dev"]},
+    "CreateStgResources" : {"Fn::Equals" : [{"Ref" : "EnvType"}, “stg”]},
+    "UseDBSnapshot": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DBSnapshotName"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    
+    
+    "AppServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "10.0.0.0/24"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "10.0.0.0/24"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "10.0.0.0/24"} ],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "One Server Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-One-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+      }
+    },
+    "IndexServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "Index Server Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-Index-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+      }
+    },
+    
+   "DocTransformationServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "Doc Transformation Server Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-DocTransformation-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+      }
+    },
+	
+	"dbSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "5432",
+            "ToPort": "5432",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "Alfresco DB Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfrasco-DB-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+      }
+    },
+    
+    "externalelbSG" : {
+       "Type" : "AWS::EC2::SecurityGroup",
+       "Properties" : {
+               "GroupDescription" : "Enable HTTP access on port 80 and 443",
+               "VpcId": {
+                         "Ref": "VpcId"
+               },
+         "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "udp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"} ],
+		   "GroupDescription": "ALB Internet Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-ELB-Internet-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+       }
+    },
+    "internalelbSG1" : {
+       "Type" : "AWS::EC2::SecurityGroup",
+       "Properties" : {
+               "GroupDescription" : "Enable HTTP access on port 80 and 443 and 9088",
+               "VpcId": {
+                         "Ref": "VpcId"
+               },
+        "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"}, 
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"}],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "udp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"},
+           { "IpProtocol" : "tcp", "FromPort" : "9088", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"} ],
+		    "GroupDescription": "ELB  Index Internet Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-ELB-Index-Intranet-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+       }
+    },
+	"internalelbSG2" : {
+       "Type" : "AWS::EC2::SecurityGroup",
+       "Properties" : {
+               "GroupDescription" : "Enable HTTP access on port 80 and 443 and 9088",
+               "VpcId": {
+                         "Ref": "VpcId"
+               },
+        "SecurityGroupIngress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"}, 
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"}],
+         "SecurityGroupEgress" : [
+           { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0"} ,
+           { "IpProtocol" : "udp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0"},
+           { "IpProtocol" : "tcp", "FromPort" : "9088", "ToPort" : "9088", "CidrIp" : "0.0.0.0/0"} ],
+		    "GroupDescription": "ELB doc transformation Intranet Security Group",
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-ELB-DocTransformation-Intranet-SG"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ]
+       }
+    },
+    "PedixEdmS3InstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "IDSRole",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "ec2:DescribeAddresses",
+                    "ec2:AssociateAddress"
+                  ],
+                  "Resource": "*",
+                  "Effect": "Allow"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "PedixEdmS3FullAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "PedixEdmInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "PedixEdmS3InstanceRole"
+          }
+        ]
+      }
+    },
+
+  "externalelb": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "Subnets": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "Listeners": [
+          {
+            "InstancePort": 80,
+            "PolicyNames": [],
+            "LoadBalancerPort": 443,
+            "Protocol": "TCP",
+            "InstanceProtocol": "TCP"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "externalelbSG"
+          }
+        ],
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-alfresco-elb-internet"
+                ]
+              ]
+            },
+            "Key": "Name"
+          },
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "predix",
+                  ".",
+                  "alfresco.external",
+                  "."
+                ]
+              ]
+            },
+            "Key": "DNSName"
+          }
+        ],
+        "HealthCheck": {
+          "HealthyThreshold": 3,
+          "Interval": 30,
+          "Target": "TCP:80",
+          "Timeout": 5,
+          "UnhealthyThreshold": 3
+        },
+        "Scheme": "internet-facing"
+      }
+    },
+   "internalelb1": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "Subnets": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "Listeners": [
+          {
+            "InstancePort": 8080,
+            "PolicyNames": [],
+            "LoadBalancerPort": 443,
+            "Protocol": "TCP",
+            "InstanceProtocol": "TCP"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "internalelbSG1"
+          }
+        ],
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-alfresco-elb-internal-1"
+                ]
+              ]
+            },
+            "Key": "Name"
+          },
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "predix",
+                  ".",
+                  "alfresco1.internal",
+                  "."
+                ]
+              ]
+            },
+            "Key": "DNSName"
+          }
+        ],
+        "HealthCheck": {
+          "HealthyThreshold": 3,
+          "Interval": 30,
+          "Target": "TCP:80",
+          "Timeout": 5,
+          "UnhealthyThreshold": 3
+        },
+        "Scheme": "internal"
+      }
+    },
+    
+  "internalelb2": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "Subnets": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "Listeners": [
+          {
+            "InstancePort": 8080,
+            "PolicyNames": [],
+            "LoadBalancerPort": 443,
+            "Protocol": "TCP",
+            "InstanceProtocol": "TCP"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "internalelbSG2"
+          }
+        ],
+        "Tags": [
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-alfresco-elb-internal-2"
+                ]
+              ]
+            },
+            "Key": "Name"
+          },
+          {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "predix",
+                  ".",
+                  "alfresco2.internal",
+                  "."
+                ]
+              ]
+            },
+            "Key": "DNSName"
+          }
+        ],
+        "HealthCheck": {
+          "HealthyThreshold": 3,
+          "Interval": 30,
+          "Target": "TCP:80",
+          "Timeout": 5,
+          "UnhealthyThreshold": 3
+        },
+        "Scheme": "internal"
+      }
+    }, 
+	
+"IndexLaunchConfig" : {
+   "Type" : "AWS::AutoScaling::LaunchConfiguration",
+   "Properties" : {
+      "KeyName": {
+          "Ref": "IndexServerKeyName"
+        },
+      "ImageId": {
+          "Ref": "IndexServerAMI"
+        },
+      
+      "SecurityGroups": [
+          {
+            "Ref": "IndexServerSG"
+          }
+        ],
+            
+     "AssociatePublicIpAddress": "false",
+           
+      "InstanceType": {
+          "Ref": "IndexServerInstanceType"
+        },
+     "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "DeleteOnTermination": true,
+              "VolumeType": "gp2",
+              "VolumeSize": 10
+            }
+          }
+        ],
+      "IamInstanceProfile": {
+          "Ref": "PedixEdmInstanceProfile"
+        }
+   }
+ },  
+
+"indexserverASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "MinSize": 1,
+        "Tags": [
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableDeploy"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableBackup"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": "indexapp",
+            "Key": "apps"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": {
+              "Fn::Join": [
+                "-",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-IndexServer"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ],
+        "MaxSize": 3,
+        "HealthCheckGracePeriod": "600",
+        "DesiredCapacity":{"Fn::If" : [
+          "CreateProdResources",
+          2,
+          {"Fn::If" : [
+            "CreateDevResources",
+            1,
+            1
+            
+          ]}
+        ]},
+        "LaunchConfigurationName": {
+          "Ref": "IndexLaunchConfig"
+        },
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "AvailabilityZones": [
+          {
+            "Fn::Select": [
+              0,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          },
+          {
+            "Fn::Select": [
+              1,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          }
+        ],
+        "LoadBalancerNames": [
+          {
+            "Ref": "internalelb1"
+          }
+        ],
+        "HealthCheckType": "EC2"
+      }
+    }, 
+	
+"DocTrasformationLaunchConfig" : {
+   "Type" : "AWS::AutoScaling::LaunchConfiguration",
+   "Properties" : {
+      "KeyName": {
+          "Ref": "DocTransformationServerKeyName"
+        },
+      "ImageId": {
+          "Ref": "DocTransformationServerAMI"
+        },
+      
+      "SecurityGroups": [
+          {
+            "Ref": "DocTransformationServerSG"
+          }
+        ],
+            
+     "AssociatePublicIpAddress": "false",
+           
+      "InstanceType": {
+          "Ref": "DocTransformationServerInstanceType"
+        },
+     "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "DeleteOnTermination": true,
+              "VolumeType": "gp2",
+              "VolumeSize": 10
+            }
+          }
+        ],
+      "IamInstanceProfile": {
+          "Ref": "PedixEdmInstanceProfile"
+        }
+   }
+ },  
+
+"doctransformationserverASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "MinSize": 1,
+        "Tags": [
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableDeploy"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableBackup"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": "indexapp",
+            "Key": "apps"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": {
+              "Fn::Join": [
+                "-",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-DocTransformationServer"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ],
+        "MaxSize": 3,
+        "HealthCheckGracePeriod": "600",
+        "DesiredCapacity":{"Fn::If" : [
+          "CreateProdResources",
+          2,
+          {"Fn::If" : [
+            "CreateDevResources",
+            1,
+            1
+            
+          ]}
+        ]},
+        "LaunchConfigurationName": {
+          "Ref": "DocTrasformationLaunchConfig"
+        },
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "AvailabilityZones": [
+          {
+            "Fn::Select": [
+              0,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          },
+          {
+            "Fn::Select": [
+              1,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          }
+        ],
+        "LoadBalancerNames": [
+          {
+            "Ref": "internalelb2"
+          }
+        ],
+        "HealthCheckType": "EC2"
+      }
+    },
+
+"AppServerLaunchConfig" : {
+   "Type" : "AWS::AutoScaling::LaunchConfiguration",
+   "Properties" : {
+      "KeyName": {
+          "Ref": "AppServerKeyName"
+        },
+      "ImageId": {
+          "Ref": "AppServerAMI"
+        },
+      
+      "SecurityGroups": [
+          {
+            "Ref": "AppServerSG"
+          }
+        ],
+            
+     "AssociatePublicIpAddress": "false",
+           
+      "InstanceType": {
+          "Ref": "AppServerInstanceType"
+        },
+     "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "DeleteOnTermination": true,
+              "VolumeType": "gp2",
+              "VolumeSize": 10
+            }
+          }
+        ],
+      "IamInstanceProfile": {
+          "Ref": "PedixEdmInstanceProfile"
+        }
+   }
+ },  
+
+"appserverASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "MinSize": 2,
+        "Tags": [
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableDeploy"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": true,
+            "Key": "EnableBackup"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": "appapp",
+            "Key": "apps"
+          },
+          {
+            "PropagateAtLaunch": "true",
+            "Value": {
+              "Fn::Join": [
+                "-",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "-Alfresco-AppServer"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ],
+        "MaxSize": 6,
+        "HealthCheckGracePeriod": "600",
+        "DesiredCapacity":{"Fn::If" : [
+          "CreateProdResources",
+          4,
+          {"Fn::If" : [
+            "CreateDevResources",
+            1,
+            1
+            
+          ]}
+        ]},
+        "LaunchConfigurationName": {
+          "Ref": "AppServerLaunchConfig"
+        },
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "privateSubnet1"
+          },
+          {
+            "Ref": "privateSubnet2"
+          }
+        ],
+        "AvailabilityZones": [
+          {
+            "Fn::Select": [
+              0,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          },
+          {
+            "Fn::Select": [
+              1,
+              {
+                "Fn::GetAZs": {
+                  "Ref": "AWS::Region"
+                }
+              }
+            ]
+          }
+        ],
+        "LoadBalancerNames": [
+          {
+            "Ref": "externalelb"
+          }
+        ],
+        "HealthCheckType": "EC2"
+      }
+    }, 
+	
+  "privatesubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "SubnetIds": [
+          {
+            "Ref": "PrivateDBSubnetID1"
+          },
+          {
+            "Ref": "PrivateDBSubnetID2"
+          }
+        ],
+        "DBSubnetGroupDescription": "Subnet group for sample postgres9.4 Database"
+      }
+    },
+    "DBParameterGroup": {
+      "Type": "AWS::RDS::DBParameterGroup",
+      "Properties": {
+        "Family": "postgres9.4",
+        "Description": "Parameter group for postgres9.4 rds",
+        "Parameters": {}
+      }
+    },
+    "predixedmdb": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "VPCSecurityGroups": [
+          {
+            "Ref": "dbSG"
+          }
+        ],
+        "DBParameterGroupName": {
+          "Ref": "DBParameterGroup"
+        },
+        "EngineVersion": "9.4.5",
+        "DBSubnetGroupName": {
+          "Ref": "privatesubnetGroup"
+        },
+        "BackupRetentionPeriod": "15",
+        "Engine": "postgres",
+        "MultiAZ": {
+          "Ref": "IsMultiAZ"
+        },
+        "Tags": [
+          {
+            "Value": "true",
+            "Key": "EnableBackup"
+          },
+          {
+            "Value": {
+              "Fn::Join": [
+                "-",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "predixedmdb"
+                ]
+              ]
+            },
+            "Key": "Name"
+          }
+        ],
+        "MasterUsername": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            "edmdbadmin"
+          ]
+        },
+        "MasterUserPassword": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            "predixedm123"
+          ]
+        },
+        "DBSnapshotIdentifier": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "AllocatedStorage": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            100
+          ]
+        },
+      "DBInstanceClass": {
+		"Ref": "EDMDBInstanceType"
+		},
+        "DBName": {
+		"Ref": "DBName"
+		},
+        "DBInstanceIdentifier": {
+          "Fn::Join": [
+            "-",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              "DBInstance"
+            ]
+          ]
+        }
+      },
+      "DeletionPolicy": "Snapshot"
+    }
+  },
+  
+  "Outputs": {
+    "VPCId": {
+      "Value": {
+        "Ref": "VpcId"
+      }
+    }
+  }
+}
